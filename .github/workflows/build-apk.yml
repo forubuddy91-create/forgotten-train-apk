@@ -1,0 +1,77 @@
+
+name: Build Forgotten Train APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Extract Game ZIP
+        run: |
+          mkdir -p game-source
+          unzip -q forgotten-train-updated.zip -d game-source
+
+          test -f game-source/package.json
+          test -f game-source/package-lock.json
+          test -f game-source/index.html
+
+      - name: Install Game Dependencies
+        working-directory: game-source
+        run: |
+          npm ci
+
+      - name: Build Game
+        working-directory: game-source
+        run: |
+          npm run build
+          test -f dist/index.html
+
+      - name: Prepare Capacitor
+        run: |
+          mkdir -p www
+          cp -R game-source/dist/. www/
+
+      - name: Install Capacitor
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Create Android Project
+        run: |
+          npx cap init "THE FORGOTTEN TRAIN" com.zx4xe.forgottentrain --web-dir=www
+          npx cap add android
+          npx cap sync android
+
+      - name: Set App Name
+        run: |
+          RES=android/app/src/main/res
+          sed -i 's|<string name="app_name">.*</string>|<string name="app_name">THE FORGOTTEN TRAIN</string>|' "$RES/values/strings.xml"
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Forgotten-Train-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
